@@ -12,6 +12,12 @@ An iPhone app you install from Safari to your Home Screen. It works fully offlin
 - **Rest timer:** starts on its own when you tick off a set. Each exercise has its own rest time, and there are −15s / +30s / Skip buttons.
 - **Countdown timer** for timed sets, with a 3-second "get ready", beeps, and pause/done. If the planned time is 0, it counts up like a stopwatch instead.
 - **Warm-up sets:** set as a percentage of the working weight (and of the reduced weight in a deload week), rounded to weights you can load. You can use the default scheme, give an exercise its own scheme, or turn warm-ups off.
+- **Tempo for each exercise:** optional, written as lower–pause–lift–pause seconds (e.g. `3-1-2-0`, with `X` for explosive). It stays the same in deload weeks and appears in history and the CSV.
+- **Metronome** (tap ♩ Metronome on an exercise, or at the top of a workout), with two modes:
+  - **Tempo:** guides each rep with a different sound for lowering, pausing and lifting, shows the current phase and rep, and can stop automatically after the set's planned reps. It can also say the rep numbers out loud.
+  - **Steady beat:** a plain click at the speed you set, in beats per minute.
+  - A start delay you choose in Settings (default 5 seconds) gives you time to put the phone down. Quiet ticks count down the delay.
+  - **Hide** keeps it running and shows a small bar at the top of the screen with a Stop button.
 - **Progress charts** for each exercise: top weight, estimated 1-rep max, volume, reps or time. You can hide deload weeks.
 - **CSV export** for Google Sheets (one row per set), plus a **full backup and restore** file.
 - **Dark mode:** automatic, or choose light or dark in Settings.
@@ -33,14 +39,15 @@ Your data lives only on the phone. Use Settings → **Back up everything** now a
 ## iPhone limitations
 
 - The rest timer can't send a lock-screen alert. While the app is closed the timer keeps counting, and it catches up as soon as you open the app again.
-- The ring/silent switch can mute the timer beeps. iPhone web apps can't vibrate.
+- The metronome stops if you lock the phone or switch apps. The app keeps the screen on during workouts so this doesn't happen in normal use.
+- The ring/silent switch can mute the timer and metronome beeps. iPhone web apps can't vibrate.
 
 ## Development
 
 Plain HTML/CSS/JavaScript with no build step and no dependencies.
 
 ```sh
-npm test          # unit tests for the deload, warm-up, cycle, CSV and backup logic
+npm test          # unit tests for the deload, warm-up, cycle, tempo, CSV and backup logic
 npm run serve     # serves the app at http://localhost:8080
 ```
 

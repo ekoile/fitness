@@ -19,6 +19,9 @@ export function defaultSettings() {
       { pct: 80, reps: 1 },
     ],
     warmupRestSec: 60,
+    metroLeadIn: 5, // seconds before the metronome starts, to put the phone down
+    metroBpm: 60,
+    metroSpeak: false,
     sound: true,
     keepAwake: true,
   };
@@ -36,6 +39,7 @@ function ex(name, o) {
     weight: 0,
     duration: 0,
     restSec: 90,
+    tempo: '',
     warmup: { mode: 'default', scheme: [] },
     deloadOverride: null,
     ...o,
@@ -50,7 +54,7 @@ export function defaultProgram() {
         id: uid(), name: 'Push', exercises: [
           ex('Bench Press', { sets: 4, reps: 6, weight: 155, restSec: 180 }),
           ex('Overhead Press', { sets: 3, reps: 8, weight: 85, restSec: 120 }),
-          ex('Incline Dumbbell Press', { sets: 3, reps: 10, weight: 45, warmup: { mode: 'off', scheme: [] } }),
+          ex('Incline Dumbbell Press', { sets: 3, reps: 10, weight: 45, tempo: '3-1-1-0', warmup: { mode: 'off', scheme: [] } }),
           ex('Triceps Pushdown', { sets: 3, reps: 12, weight: 50, restSec: 60, warmup: { mode: 'off', scheme: [] } }),
         ],
       },
@@ -67,7 +71,7 @@ export function defaultProgram() {
           ex('Back Squat', { sets: 4, reps: 5, weight: 185, restSec: 180, warmup: { mode: 'custom', scheme: [
             { pct: 40, reps: 5 }, { pct: 60, reps: 3 }, { pct: 75, reps: 2 }, { pct: 90, reps: 1 },
           ] } }),
-          ex('Romanian Deadlift', { sets: 3, reps: 8, weight: 135, restSec: 120 }),
+          ex('Romanian Deadlift', { sets: 3, reps: 8, weight: 135, restSec: 120, tempo: '3-1-1-1' }),
           ex('Farmer Carry', { trackReps: false, trackTime: true, sets: 3, weight: 50, duration: 40, restSec: 90, warmup: { mode: 'off', scheme: [] } }),
           ex('Plank', { trackWeight: false, trackReps: false, trackTime: true, sets: 3, duration: 60, restSec: 60, warmup: { mode: 'off', scheme: [] } }),
         ],

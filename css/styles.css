@@ -338,3 +338,45 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
   .set-row { grid-template-columns: 34px repeat(var(--cols), minmax(0, 1fr)) 44px; gap: 4px; }
   .tiles strong { font-size: 16px; }
 }
+
+/* Tempo & metronome */
+.tempo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; }
+.tempo-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--text-2); font-size: 14px;
+}
+.tempo-chip strong { color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.metro-btn { color: var(--accent); }
+.workout-head { position: relative; }
+.head-metro { position: absolute; right: 0; top: 14px; }
+.tempo-line { margin: -4px 0 6px; }
+input.tempo-input {
+  font: inherit; font-size: 18px; font-weight: 600; letter-spacing: .04em; text-align: center;
+  width: 130px; min-height: 42px; padding: 0 8px; color: var(--text); background: var(--card-2);
+  border: 1px solid var(--border); border-radius: 10px; text-transform: uppercase;
+}
+.metro-sheet .cd-box { text-align: left; }
+.metro-sheet .cd-title, .metro-display, .metro-sheet .cd-sub { text-align: center; }
+.metro-display { padding: 6px 0 2px; }
+.metro-big { font-size: 64px; font-weight: 800; margin: 4px 0 0; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.metro-big.lower { color: var(--accent); }
+.metro-big.lift { color: #1f9d55; }
+.metro-big.pause { color: var(--muted); }
+.segmented button[disabled] { opacity: .6; }
+.bpm-row { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 8px 0; }
+.bpm-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.bpm-input { width: 90px !important; font-size: 24px !important; font-weight: 700; }
+.big-icon { min-width: 52px; min-height: 52px; font-size: 26px; border-radius: 50%; }
+.btn.stop { background: var(--danger); border-color: var(--danger); }
+.metro-pill {
+  position: fixed; top: calc(var(--safe-t) + 8px); left: 50%; transform: translateX(-50%); z-index: 35;
+  display: flex; align-items: stretch; border-radius: 99px; overflow: hidden;
+  background: #1d1d1b; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.3); max-width: calc(100% - 32px);
+}
+.metro-pill[hidden] { display: none; }
+.metro-pill button { border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; min-height: 40px; padding: 0 14px; white-space: nowrap; }
+.metro-pill .pill-main { overflow: hidden; text-overflow: ellipsis; }
+.metro-pill .pill-stop { background: var(--danger); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .metro-big.lift { color: #3ccf7a; } }
+:root[data-theme="dark"] .metro-big.lift { color: #3ccf7a; }
+.workout-head h1 { padding-right: 140px; }

@@ -1,6 +1,6 @@
 // Offline support: cache the whole app on install, serve it cache-first.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'liftlog-v1.0.0';
+const VERSION = 'liftlog-v1.1.0';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   './js/store.js',
   './js/chart.js',
   './js/audio.js',
+  './js/metronome.js',
   './icons/icon.svg',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',

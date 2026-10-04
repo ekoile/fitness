@@ -2,8 +2,9 @@ import * as L from './logic.js';
 import { loadState, saveState, normalizeState, requestPersistence, defaultProgram } from './store.js';
 import { renderLineChart } from './chart.js';
 import * as audio from './audio.js';
+import * as metro from './metronome.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 let S; // app state (settings, program, sessions, active)
 let editing = null; // deep copy of a history session being edited
@@ -158,7 +159,8 @@ function renderToday() {
         ${day.exercises.map((ex) => {
           const t = L.plannedTargets(ex, S.settings, deload);
           const wu = L.warmupSets(ex, S.settings, t.weight).length;
-          return `<li><span>${esc(ex.name)}</span><span class="muted">${esc(targetText(ex, t))}${wu ? ` · ${wu} warm-up` : ''}</span></li>`;
+          const tp = L.parseTempo(ex.tempo);
+          return `<li><span>${esc(ex.name)}</span><span class="muted">${esc(targetText(ex, t))}${tp ? ` · tempo ${esc(tp.text)}` : ''}${wu ? ` · ${wu} warm-up` : ''}</span></li>`;
         }).join('') || '<li class="muted">No exercises in this day yet.</li>'}
       </ul>
       <button type="button" class="btn primary block big" data-act="start" ${day.exercises.length ? '' : 'disabled'}>Start ${esc(day.name)}</button>
@@ -200,6 +202,10 @@ function exerciseCard(session, ex, ei, mode) {
   const doneCount = ex.sets.filter((s) => s.done).length;
   return `<section class="card ex-card" data-ei="${ei}">
     <div class="row-between"><h2>${esc(ex.name)}</h2><span class="muted small">${doneCount}/${ex.sets.length} · rest ${L.formatDuration(ex.restSec)}</span></div>
+    ${ex.tempo || mode === 'active' ? `<div class="tempo-row">
+      ${ex.tempo ? `<span class="tempo-chip" title="${esc(L.describeTempo(ex.tempo))}">Tempo <strong>${esc(ex.tempo)}</strong></span>` : ''}
+      ${mode === 'active' ? `<button type="button" class="btn small metro-btn" data-act="metro-for" data-ei="${ei}">♩ Metronome</button>` : ''}
+    </div>` : ''}
     ${lastHtml}
     <div class="sets" style="--cols:${cols}">
       <div class="set-row head">${heads.join('')}</div>
@@ -222,6 +228,7 @@ function renderWorkout(session, mode) {
       <p class="sub">${mode === 'edit' ? 'Editing · ' + esc(fmtDate(session.startedAt)) + ' · ' : ''}Week ${session.week}
         ${session.deload ? '<span class="badge deload">Deload</span>' : ''}
         ${mode === 'active' ? '· <span id="elapsed"></span>' : ''}</p>
+      ${mode === 'active' ? '<button type="button" class="btn small metro-btn head-metro" data-act="metro-for" data-ei="-1">♩ Metronome</button>' : ''}
     </header>
     ${session.exercises.map((ex, ei) => exerciseCard(session, ex, ei, mode)).join('')}
     <section class="card">
@@ -284,6 +291,7 @@ function finishWorkout() {
   delete s.timer;
   S.sessions.push(s);
   S.active = null;
+  closeMetro();
   persistNow();
   wakeLock.update();
   hideOverlays();
@@ -447,6 +455,160 @@ const wakeLock = {
 };
 
 // ============================================================
+// METRONOME
+// ============================================================
+
+const metroUI = { ei: -1, mode: 'beat', tempo: '', bpm: 60, stopAfter: true, targetReps: 0, lastRep: 0, doneAt: 0, message: '' };
+
+// Reps of the next working set that isn't ticked off yet.
+function nextTargetReps(ex) {
+  if (!ex || !ex.trackReps) return 0;
+  const set = ex.sets.find((x) => x.type === 'working' && !x.done) || ex.sets.filter((x) => x.type === 'working').pop();
+  return set && set.reps > 0 ? set.reps : 0;
+}
+
+function openMetro(ei) {
+  const ex = S.active && ei >= 0 ? S.active.exercises[ei] : null;
+  if (!metro.isRunning()) {
+    metroUI.ei = ex ? ei : -1;
+    metroUI.tempo = ex ? ex.tempo || '' : '';
+    metroUI.mode = ex && L.parseTempo(ex.tempo) ? 'tempo' : 'beat';
+    metroUI.bpm = S.settings.metroBpm || 60;
+    metroUI.targetReps = nextTargetReps(ex);
+    metroUI.message = '';
+  }
+  document.getElementById('metro').hidden = false;
+  renderMetro();
+}
+
+function closeMetro() {
+  metro.stop();
+  document.getElementById('metro').hidden = true;
+  document.getElementById('metro-pill').hidden = true;
+}
+
+function metroTitle() {
+  const ex = S.active && metroUI.ei >= 0 ? S.active.exercises[metroUI.ei] : null;
+  return ex ? ex.name : 'Metronome';
+}
+
+function renderMetro() {
+  const box = document.getElementById('metro-box');
+  const running = metro.isRunning();
+  const tp = L.parseTempo(metroUI.tempo);
+  const lead = S.settings.metroLeadIn;
+  box.innerHTML = `
+    <p class="cd-title">${esc(metroTitle())}</p>
+    <div class="segmented ${running ? 'locked' : ''}">
+      <button type="button" class="${metroUI.mode === 'tempo' ? 'on' : ''}" data-act="metro-mode" data-m="tempo" ${running ? 'disabled' : ''}>Tempo</button>
+      <button type="button" class="${metroUI.mode === 'beat' ? 'on' : ''}" data-act="metro-mode" data-m="beat" ${running ? 'disabled' : ''}>Steady beat</button>
+    </div>
+    ${metroUI.mode === 'tempo' ? `
+      <label class="field"><span>Tempo</span><input class="tempo-input" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" data-metro="tempo" value="${esc(metroUI.tempo)}" placeholder="3-1-2-0" ${running ? 'disabled' : ''} aria-label="Tempo"></label>
+      <p class="muted small left" id="metro-tempo-help">${esc(tempoHelp(metroUI.tempo))}</p>
+      ${metroUI.targetReps ? `<label class="switch-row"><span>Stop after ${metroUI.targetReps} reps</span><input type="checkbox" class="switch" data-act="metro-stopafter" ${metroUI.stopAfter ? 'checked' : ''} ${running ? 'disabled' : ''}></label>` : ''}`
+    : `
+      <div class="bpm-row">
+        <button type="button" class="icon-btn big-icon" data-act="metro-bpm" data-d="-5" ${running ? 'disabled' : ''} aria-label="Slower">−</button>
+        <label><input class="num bpm-input" type="text" inputmode="numeric" data-metro="bpm" value="${metroUI.bpm}" ${running ? 'disabled' : ''} aria-label="Beats per minute"><span>BPM</span></label>
+        <button type="button" class="icon-btn big-icon" data-act="metro-bpm" data-d="5" ${running ? 'disabled' : ''} aria-label="Faster">+</button>
+      </div>`}
+    <div class="metro-display" id="metro-display">
+      <p class="metro-big">${running ? '' : metroUI.message ? '✓' : 'Ready'}</p>
+      <p class="cd-sub">${running ? '' : esc(metroUI.message || (lead ? `Starts ${lead}s after you tap Start` : 'Starts as soon as you tap Start'))}</p>
+      <div class="cd-progress"><span></span></div>
+    </div>
+    <div class="cd-actions">
+      ${running
+        ? '<button type="button" class="btn big" data-act="metro-hide">Hide</button><button type="button" class="btn primary big stop" data-act="metro-stop">Stop</button>'
+        : `<button type="button" class="btn big" data-act="metro-hide">Close</button><button type="button" class="btn primary big" data-act="metro-start" ${metroUI.mode === 'tempo' && !tp ? 'disabled' : ''}>Start</button>`}
+    </div>`;
+  updateMetro();
+}
+
+function startMetro() {
+  const tp = L.parseTempo(metroUI.tempo);
+  if (metroUI.mode === 'tempo' && !tp) return;
+  // Prime speech on this tap: iOS only allows it after a user gesture.
+  if (S.settings.metroSpeak && window.speechSynthesis) {
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch {}
+  }
+  const ok = metro.start({
+    mode: metroUI.mode,
+    secs: tp ? tp.secs : null,
+    bpm: metroUI.bpm,
+    leadIn: S.settings.metroLeadIn,
+    targetReps: metroUI.mode === 'tempo' && metroUI.stopAfter ? metroUI.targetReps : 0,
+  });
+  if (!ok) return toast('Sound is not available on this device');
+  metroUI.lastRep = 0;
+  metroUI.doneAt = 0;
+  metroUI.message = '';
+  renderMetro();
+}
+
+function stopMetro(message) {
+  metro.stop();
+  metroUI.message = message || '';
+  if (!document.getElementById('metro').hidden) renderMetro();
+  updateMetro();
+}
+
+function speakRep(n) {
+  if (!S.settings.metroSpeak || !window.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(String(n));
+    u.rate = 1.2;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
+function updateMetro() {
+  const sheet = document.getElementById('metro');
+  const pill = document.getElementById('metro-pill');
+  if (!sheet || !S) return;
+  const stt = metro.status();
+  pill.hidden = !(stt && sheet.hidden);
+  if (!stt) return;
+
+  let big = '';
+  let sub = '';
+  let pct = 0;
+  let phaseClass = '';
+  if (stt.stage === 'lead') {
+    big = String(stt.leadRemaining);
+    sub = 'Get in position…';
+  } else if (stt.stage === 'done') {
+    if (!metroUI.doneAt) { metroUI.doneAt = Date.now(); speakRep(stt.rep); }
+    big = '✓';
+    sub = `${stt.rep} reps done`;
+    pct = 100;
+    if (Date.now() - metroUI.doneAt > 1500) return stopMetro(`${stt.rep} reps done`);
+  } else if (stt.mode === 'beat') {
+    big = String(((stt.beat - 1) % 4) + 1);
+    sub = `${stt.bpm} BPM · beat ${stt.beat}`;
+  } else {
+    if (stt.rep > metroUI.lastRep) { metroUI.lastRep = stt.rep; speakRep(stt.rep); }
+    big = L.TEMPO_PHASES[stt.phase];
+    phaseClass = ['lower', 'pause', 'lift', 'pause'][stt.phase];
+    const rep = stt.rep + 1;
+    sub = `${Math.ceil(stt.phaseRemaining)}s · rep ${stt.targetReps ? `${Math.min(rep, stt.targetReps)} of ${stt.targetReps}` : rep}`;
+    pct = stt.phaseLength ? (stt.phaseElapsed / stt.phaseLength) * 100 : 0;
+  }
+
+  const disp = document.getElementById('metro-display');
+  if (disp && !sheet.hidden) {
+    const b = disp.querySelector('.metro-big');
+    b.textContent = big;
+    b.className = 'metro-big ' + phaseClass;
+    disp.querySelector('.cd-sub').textContent = sub;
+    disp.querySelector('.cd-progress span').style.width = `${Math.min(100, pct)}%`;
+  }
+  pill.querySelector('span').textContent = stt.stage === 'lead' ? `Starting in ${big}` : stt.mode === 'tempo' && stt.stage === 'run' ? `${big} · ${sub}` : sub;
+}
+
+// ============================================================
 // PROGRAM
 // ============================================================
 
@@ -516,7 +678,13 @@ function exPreview(ex) {
   const wu = L.warmupSets(ex, S.settings, n.weight);
   return `<div><span class="muted">Normal weeks:</span> ${esc(targetText(ex, n))}</div>
     <div><span class="muted">Deload week:</span> ${esc(targetText(ex, d))}</div>
-    ${wu.length ? `<div><span class="muted">Warm-ups:</span> ${wu.map((w) => `${esc(L.fmtNum(w.weight))}×${w.reps}`).join(', ')}</div>` : ''}`;
+    ${wu.length ? `<div><span class="muted">Warm-ups:</span> ${wu.map((w) => `${esc(L.fmtNum(w.weight))}×${w.reps}`).join(', ')}</div>` : ''}
+    ${L.parseTempo(ex.tempo) ? `<div><span class="muted">Tempo:</span> ${esc(L.parseTempo(ex.tempo).text)}</div>` : ''}`;
+}
+
+function tempoHelp(t) {
+  if (!String(t || '').trim()) return 'No tempo set.';
+  return L.parseTempo(t) ? L.describeTempo(t) : 'Not a valid tempo yet — use four numbers like 3-1-2-0.';
 }
 
 function renderExerciseEditor(dayId, exId) {
@@ -546,6 +714,13 @@ function renderExerciseEditor(dayId, exId) {
       ${ex.trackTime ? field('duration', 'Time per set', ex.duration, 'numeric', 'sec') : ''}
       ${field('restSec', 'Rest between sets', ex.restSec, 'numeric', 'sec')}
       <div class="chips small-chips">${[30, 45, 60, 90, 120, 180, 240].map((s) => `<button type="button" class="chip ${ex.restSec === s ? 'on' : ''}" data-act="rest-preset" data-s="${s}">${L.formatDuration(s)}</button>`).join('')}</div>
+    </section>
+    <section class="card">
+      <h2>Tempo</h2>
+      <label class="field"><span>Tempo <small class="muted">(optional)</small></span>
+        <input class="tempo-input" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" data-f="tempo" value="${esc(ex.tempo || '')}" placeholder="3-1-2-0" aria-label="Tempo"></label>
+      <p class="muted small" id="tempo-help">${esc(tempoHelp(ex.tempo))}</p>
+      <p class="muted small">Seconds to lower – pause at the bottom – lift – pause at the top. Use X for explosive. Stays the same in deload weeks.</p>
     </section>
     ${ex.trackWeight ? `<section class="card">
       <h2>Warm-up sets</h2>
@@ -617,6 +792,7 @@ function renderSessionDetail(id) {
       let w = 0;
       let k = 0;
       return `<section class="card"><h2>${esc(ex.name)}</h2>
+        ${ex.tempo ? `<p class="muted small tempo-line">Tempo ${esc(ex.tempo)}</p>` : ''}
         <table class="log"><thead><tr><th>Set</th>${ex.trackWeight ? `<th>${esc(unit())}</th>` : ''}${ex.trackReps ? '<th>Reps</th>' : ''}${ex.trackTime ? '<th>Time</th>' : ''}</tr></thead><tbody>
         ${ex.sets.filter((x) => x.done).map((x) => `<tr class="${x.type === 'warmup' ? 'warm' : ''}"><td>${x.type === 'warmup' ? `W${++w}` : ++k}</td>
           ${ex.trackWeight ? `<td>${esc(L.fmtNum(x.weight))}</td>` : ''}${ex.trackReps ? `<td>${esc(x.reps ?? '')}</td>` : ''}${ex.trackTime ? `<td>${L.formatDuration(x.duration)}</td>` : ''}</tr>`).join('')}
@@ -752,6 +928,13 @@ function renderSettings() {
       <label class="switch-row"><span>Keep screen on during workouts</span><input type="checkbox" class="switch" data-act="keep-awake" ${st.keepAwake ? 'checked' : ''}></label>
     </section>
     <section class="card">
+      <h2>Metronome</h2>
+      ${field('metroLeadIn', 'Delay before it starts', st.metroLeadIn, 'numeric', 'sec')}
+      <p class="muted small">Time to put the phone down after tapping Start. Quiet ticks count down the delay.</p>
+      ${field('metroBpm', 'Default beat speed', st.metroBpm, 'numeric', 'BPM')}
+      <label class="switch-row"><span>Say rep numbers out loud<small>Tempo mode: speaks each completed rep</small></span><input type="checkbox" class="switch" data-act="metro-speak" ${st.metroSpeak ? 'checked' : ''}></label>
+    </section>
+    <section class="card">
       <h2>Appearance</h2>
       <div class="segmented">${[['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<button type="button" class="${st.theme === k ? 'on' : ''}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
     </section>
@@ -883,7 +1066,7 @@ document.addEventListener('click', (e) => {
     case 'finish': finishWorkout(); break;
     case 'discard':
       if (confirm('Discard this workout? Nothing from it will be saved.')) {
-        S.active = null; persistNow(); wakeLock.update(); hideOverlays(); render();
+        S.active = null; closeMetro(); persistNow(); wakeLock.update(); hideOverlays(); render();
       }
       break;
     case 'save-edit': {
@@ -916,6 +1099,15 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'cd-cancel': S.active.timer = null; persist(); updateTimers(); break;
+
+    // metronome
+    case 'metro-for': openMetro(ei); break;
+    case 'metro-mode': if (!metro.isRunning()) { metroUI.mode = btn.dataset.m; renderMetro(); } break;
+    case 'metro-bpm': if (!metro.isRunning()) { metroUI.bpm = Math.min(240, Math.max(20, metroUI.bpm + Number(btn.dataset.d))); renderMetro(); } break;
+    case 'metro-start': startMetro(); break;
+    case 'metro-stop': stopMetro(); break;
+    case 'metro-hide': document.getElementById('metro').hidden = true; updateMetro(); break;
+    case 'metro-open': document.getElementById('metro').hidden = false; renderMetro(); break;
 
     // program
     case 'day-up': moveItem(S.program.days, i, -1); persist(); render(); break;
@@ -1054,6 +1246,8 @@ document.addEventListener('change', (e) => {
     case 'prog-deload': S.ui.progHideDeload = !el.checked; render(); break;
     case 'sound': S.settings.sound = el.checked; persist(); break;
     case 'keep-awake': S.settings.keepAwake = el.checked; persist(); wakeLock.update(); break;
+    case 'metro-speak': S.settings.metroSpeak = el.checked; persist(); break;
+    case 'metro-stopafter': metroUI.stopAfter = el.checked; break;
     case 'restore': if (el.files[0]) restoreBackup(el.files[0]); el.value = ''; break;
     default: break;
   }
@@ -1063,10 +1257,24 @@ document.addEventListener('change', (e) => {
 document.addEventListener('input', (e) => {
   const el = e.target;
   const f = el.dataset.f;
-  if (!f) return;
+  if (!f && !el.dataset.metro) return;
   const v = el.value;
   const i = Number(el.dataset.i);
   const tab = parseRoute().tab;
+
+  if (el.dataset.metro) {
+    if (el.dataset.metro === 'tempo') {
+      metroUI.tempo = v;
+      const help = document.getElementById('metro-tempo-help');
+      if (help) help.textContent = tempoHelp(v);
+      const startBtn = document.querySelector('[data-act="metro-start"]');
+      if (startBtn) startBtn.disabled = !L.parseTempo(v);
+    } else if (el.dataset.metro === 'bpm') {
+      const n = num(v);
+      if (n) metroUI.bpm = Math.round(L.clampNum(n, 20, 240));
+    }
+    return;
+  }
 
   if (tab === 'today' || (tab === 'history' && editing)) {
     const session = workoutSession();
@@ -1089,6 +1297,12 @@ document.addEventListener('input', (e) => {
     if (!ex) return;
     const n = num(v);
     if (f === 'ex-name') ex.name = v.trim() || 'Exercise';
+    else if (f === 'tempo') {
+      const tp = L.parseTempo(v);
+      ex.tempo = tp ? tp.text : v.trim() ? ex.tempo : '';
+      const help = document.getElementById('tempo-help');
+      if (help) help.textContent = tempoHelp(v);
+    }
     else if (f === 'sets') ex.sets = Math.max(1, Math.round(n || 1));
     else if (['reps', 'duration', 'restSec'].includes(f)) ex[f] = Math.max(0, Math.round(n || 0));
     else if (f === 'weight') ex.weight = Math.max(0, n || 0);
@@ -1109,6 +1323,8 @@ document.addEventListener('input', (e) => {
     else if (f === 'defwu-pct') st.warmupScheme[i].pct = L.clampNum(n, 0, 100);
     else if (f === 'defwu-reps') st.warmupScheme[i].reps = Math.round(L.clampNum(n, 0, 999));
     else if (f === 'warmupRestSec') st.warmupRestSec = Math.round(L.clampNum(n, 0, 3600));
+    else if (f === 'metroLeadIn') st.metroLeadIn = Math.round(L.clampNum(n, 0, 60));
+    else if (f === 'metroBpm') st.metroBpm = Math.round(L.clampNum(n || 60, 20, 240));
     persist();
   }
 });
@@ -1125,6 +1341,9 @@ window.addEventListener('hashchange', () => {
 
 document.addEventListener('visibilitychange', () => {
   if (!S) return;
+  if (document.visibilityState === 'hidden' && metro.isRunning()) {
+    stopMetro('Stopped because the app left the screen');
+  }
   if (document.visibilityState === 'hidden') persistNow();
   else updateTimers();
   wakeLock.update();
@@ -1161,6 +1380,7 @@ async function boot() {
     .map(([k, l]) => `<a href="#/${k}" data-tab="${k}">${icon(k)}<span>${l}</span></a>`).join('');
   render();
   setInterval(updateTimers, 250);
+  setInterval(updateMetro, 100);
   audio.installUnlock();
   wakeLock.update();
   registerSW();

@@ -159,3 +159,42 @@ test('progress metrics use working sets only', () => {
   assert.equal(L.metricValue(ex, 'e1rm'), 133.3);
   assert.equal(L.metricValue(ex, 'totalReps'), 15);
 });
+
+test('parseTempo accepts common notations', () => {
+  assert.deepEqual(L.parseTempo('3-1-2-0'), { text: '3-1-2-0', secs: [3, 1, 2, 0] });
+  assert.deepEqual(L.parseTempo('3120'), { text: '3-1-2-0', secs: [3, 1, 2, 0] });
+  assert.deepEqual(L.parseTempo('4 0 x 1'), { text: '4-0-X-1', secs: [4, 0, 1, 1] });
+  assert.deepEqual(L.parseTempo('3/1/1'), { text: '3-1-1-0', secs: [3, 1, 1, 0] });
+  assert.equal(L.parseTempo(''), null);
+  assert.equal(L.parseTempo('0-0-0-0'), null);
+  assert.equal(L.parseTempo('fast'), null);
+  assert.equal(L.parseTempo('1-2-3-4-5'), null);
+});
+
+test('tempo beats: one click per second, first of each phase marked, zero phases skipped', () => {
+  const beats = L.tempoBeatsInRep([3, 0, 2, 1]);
+  assert.deepEqual(beats.map((b) => [b.offset, b.phase, b.first]), [
+    [0, 0, true], [1, 0, false], [2, 0, false], [3, 2, true], [4, 2, false], [5, 3, true],
+  ]);
+});
+
+test('tempoPosition tracks rep and phase', () => {
+  const secs = [3, 1, 2, 0];
+  assert.deepEqual(L.tempoPosition(secs, 0.5), { rep: 0, phase: 0, phaseElapsed: 0.5, phaseRemaining: 2.5 });
+  assert.equal(L.tempoPosition(secs, 3.2).phase, 1);
+  assert.equal(L.tempoPosition(secs, 4.5).phase, 2);
+  const p = L.tempoPosition(secs, 6.5);
+  assert.equal(p.rep, 1);
+  assert.equal(p.phase, 0);
+});
+
+test('tempo is copied into sessions, unchanged by deload, and exported to CSV', () => {
+  const ex = { ...bench, tempo: '3-1-2-0' };
+  const s = L.buildSession({ id: 'd', name: 'Push', exercises: [ex] }, settings, { week: 4, deload: true });
+  assert.equal(s.exercises[0].tempo, '3-1-2-0');
+  s.exercises[0].sets.forEach((x) => { x.done = true; });
+  const csv = L.sessionsToCsv([s], 'lb');
+  const [head, row] = csv.split('\r\n');
+  const cols = head.split(',');
+  assert.equal(row.split(',')[cols.indexOf('Tempo')], '3-1-2-0');
+});

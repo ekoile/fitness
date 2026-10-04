@@ -146,6 +146,7 @@ export function buildSessionExercise(ex, settings, deload) {
     trackReps: !!ex.trackReps,
     trackTime: !!ex.trackTime,
     restSec: ex.restSec,
+    tempo: parseTempo(ex.tempo)?.text || '',
     notes: '',
     sets,
   };
@@ -296,7 +297,7 @@ export function progressSeries(sessions, name, metric) {
 export const CSV_HEADERS = [
   'Date', 'Start Time', 'Program Week', 'Deload', 'Workout Day', 'Exercise', 'Set #', 'Set Type',
   'Weight', 'Unit', 'Reps', 'Duration (sec)', 'Planned Weight', 'Planned Reps', 'Planned Duration (sec)',
-  'Rest (sec)', 'Exercise Notes', 'Session Notes',
+  'Rest (sec)', 'Tempo', 'Exercise Notes', 'Session Notes',
 ];
 
 export function csvCell(v) {
@@ -337,7 +338,7 @@ export function sessionsToCsv(sessions, unit) {
           ex.trackReps ? set.reps : '', ex.trackTime ? set.duration : '',
           ex.trackWeight ? set.planned?.weight : '', ex.trackReps ? set.planned?.reps : '',
           ex.trackTime ? set.planned?.duration : '',
-          set.restSec, ex.notes, s.notes,
+          set.restSec, ex.tempo || '', ex.notes, s.notes,
         ]);
       }
     }
@@ -373,4 +374,60 @@ export function parseBackup(text) {
     throw new Error('The backup is missing its program or history.');
   }
   return { settings: data.settings, program: data.program, sessions: data.sessions };
+}
+
+// ---------- Tempo ----------
+// Standard 4-part lifting tempo: lower - pause at bottom - lift - pause at top.
+// "X" means explosive and is timed as 1 second.
+
+export const TEMPO_PHASES = ['Lower', 'Pause', 'Lift', 'Pause'];
+
+// Returns { text: '3-1-2-0', secs: [3,1,2,0] } or null if it isn't a valid tempo.
+export function parseTempo(input) {
+  const raw = String(input ?? '').trim().toUpperCase();
+  if (!raw) return null;
+  let tokens;
+  if (/^[0-9X]{3,4}$/.test(raw)) tokens = raw.split('');
+  else tokens = raw.split(/[\s\-/.:,]+/).filter(Boolean);
+  if (tokens.length === 3) tokens.push('0');
+  if (tokens.length !== 4 || !tokens.every((t) => /^(X|\d{1,2})$/.test(t))) return null;
+  const secs = tokens.map((t) => (t === 'X' ? 1 : Number(t)));
+  if (secs.reduce((a, b) => a + b, 0) <= 0) return null;
+  return { text: tokens.join('-'), secs };
+}
+
+export function tempoRepSeconds(secs) {
+  return secs.reduce((a, b) => a + b, 0);
+}
+
+export function describeTempo(t) {
+  const p = parseTempo(t);
+  if (!p) return '';
+  const tok = p.text.split('-');
+  const part = (i, label) => `${label} ${tok[i] === 'X' ? 'explosively' : tok[i] + 's'}`;
+  return `${part(0, 'lower')} · ${part(1, 'pause')} · ${part(2, 'lift')} · ${part(3, 'pause')} = ${tempoRepSeconds(p.secs)}s per rep`;
+}
+
+// Metronome beats inside one rep: one click per second, first click of each phase marked.
+export function tempoBeatsInRep(secs) {
+  const beats = [];
+  let t = 0;
+  secs.forEach((d, phase) => {
+    for (let k = 0; k < d; k++) beats.push({ offset: t + k, phase, first: k === 0 });
+    t += d;
+  });
+  return beats;
+}
+
+// Where we are `elapsed` seconds into a tempo-guided set.
+export function tempoPosition(secs, elapsed) {
+  const len = tempoRepSeconds(secs);
+  const rep = Math.floor(elapsed / len);
+  let within = elapsed - rep * len;
+  let phase = 0;
+  while (phase < 3 && (secs[phase] === 0 || within >= secs[phase])) {
+    within -= secs[phase];
+    phase++;
+  }
+  return { rep, phase, phaseElapsed: within, phaseRemaining: Math.max(0, secs[phase] - within) };
 }

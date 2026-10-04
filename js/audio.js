@@ -28,10 +28,20 @@ export function installUnlock() {
   document.addEventListener('touchend', unlock, { passive: true });
 }
 
+export function context() {
+  return ensure();
+}
+
 function beep(freq, ms, delayMs = 0, vol = 0.25) {
   const c = ensure();
-  if (!c) return;
-  const t = c.currentTime + delayMs / 1000;
+  if (!c) return null;
+  return beepAt(freq, ms, c.currentTime + delayMs / 1000, vol);
+}
+
+// Schedule a tone at an exact AudioContext time (used by the metronome for steady timing).
+export function beepAt(freq, ms, t, vol = 0.25) {
+  const c = ensure();
+  if (!c) return null;
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = 'sine';
@@ -42,6 +52,7 @@ function beep(freq, ms, delayMs = 0, vol = 0.25) {
   o.connect(g).connect(c.destination);
   o.start(t);
   o.stop(t + ms / 1000 + 0.05);
+  return o;
 }
 
 export function tick(on) { if (on) beep(660, 120); }
