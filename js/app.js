@@ -4,7 +4,7 @@ import { renderLineChart } from './chart.js';
 import * as audio from './audio.js';
 import * as metro from './metronome.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 let S; // app state (settings, program, sessions, active)
 let editing = null; // deep copy of a history session being edited
@@ -1359,14 +1359,19 @@ window.addEventListener('resize', () => {
 
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
+  // When a new version takes over, offer a reload so the new screens load.
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // first install, nothing to update
+    toast('App updated — tap Reload to use the new version', {
+      label: 'Reload',
+      run: () => { persistNow().then(() => location.reload()); },
+    });
+  });
   navigator.serviceWorker.register('./sw.js').then((reg) => {
-    reg.addEventListener('updatefound', () => {
-      const w = reg.installing;
-      w && w.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('An app update is ready', { label: 'Reload', run: () => { persistNow().then(() => location.reload()); } });
-        }
-      });
+    // Check for updates whenever the app comes back to the screen.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
     });
   }).catch((e) => console.warn('SW registration failed', e));
 }

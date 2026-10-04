@@ -1,6 +1,6 @@
 // Offline support: cache the whole app on install, serve it cache-first.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'liftlog-v1.1.0';
+const VERSION = 'liftlog-v1.2.0';
 const ASSETS = [
   './',
   './index.html',
@@ -19,7 +19,13 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS)));
+  // cache: 'reload' skips the browser's HTTP cache so we never store stale files.
+  event.waitUntil(
+    caches.open(VERSION).then((c) => c.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' })))),
+  );
+  // Take over straight away instead of waiting for every window of the app to close
+  // (an installed iPhone app may never fully close, so the update would never apply).
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
