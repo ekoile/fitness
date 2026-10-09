@@ -1,6 +1,6 @@
 // Offline support: cache the whole app on install, serve it cache-first.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'liftlog-v1.2.0';
+const VERSION = 'liftlog-v1.2.1';
 const ASSETS = [
   './',
   './index.html',
