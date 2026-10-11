@@ -269,6 +269,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cd-progress span { display: block; height: 100%; width: 0; background: var(--accent); }
 .cd-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
 
+/* Ringer reminder at workout start */
+.ringer-icon { font-size: 40px; margin: 0; line-height: 1; }
+.ringer-title { font-size: 22px; font-weight: 700; margin: 8px 0 0; }
+#ringer .cd-progress span { width: 100%; }
+#ringer .cd-progress span.run { width: 0; transition: width linear; }
+
 /* Scheme editor */
 .scheme { display: grid; gap: 8px; }
 .scheme-row, .scheme-head { display: grid; grid-template-columns: 36px 1fr 1fr 40px; align-items: center; gap: 8px; font-size: 15px; }

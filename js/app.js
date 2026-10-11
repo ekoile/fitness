@@ -272,6 +272,28 @@ function startWorkout() {
   persistNow();
   wakeLock.update();
   render();
+  showRingerReminder();
+}
+
+// iPhone web apps can't tell whether the phone is on silent, so remind on every start.
+const RINGER_MS = 5000;
+function showRingerReminder() {
+  const box = document.getElementById('ringer');
+  const bar = box.querySelector('.cd-progress span');
+  box.hidden = false;
+  // Restart the shrinking bar from full.
+  bar.classList.remove('run');
+  bar.style.transitionDuration = '';
+  void bar.offsetWidth;
+  bar.style.transitionDuration = `${RINGER_MS}ms`;
+  bar.classList.add('run');
+  clearTimeout(showRingerReminder.timer);
+  showRingerReminder.timer = setTimeout(hideRingerReminder, RINGER_MS);
+}
+
+function hideRingerReminder() {
+  clearTimeout(showRingerReminder.timer);
+  document.getElementById('ringer').hidden = true;
 }
 
 function stripUndone(session) {
@@ -295,6 +317,7 @@ function finishWorkout() {
   persistNow();
   wakeLock.update();
   hideOverlays();
+  hideRingerReminder();
   toast('Workout saved');
   go(`#/history/${s.id}`);
 }
@@ -1196,6 +1219,8 @@ document.addEventListener('click', (e) => {
     case 'defwu-add': S.settings.warmupScheme.push({ pct: 50, reps: 5 }); persist(); render(); break;
     case 'defwu-del': S.settings.warmupScheme.splice(i, 1); persist(); render(); break;
     case 'test-sound': audio.restOver(true); break;
+    case 'ringer-test': audio.restOver(true); showRingerReminder(); break;
+    case 'ringer-ok': hideRingerReminder(); break;
     case 'theme': S.settings.theme = btn.dataset.t; applyTheme(); persist(); render(); break;
     case 'reset-program':
       if (confirm('Replace your program with the starter Push/Pull/Legs template? History is kept.')) {

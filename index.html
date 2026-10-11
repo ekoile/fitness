@@ -54,6 +54,19 @@
     <button type="button" class="pill-stop" data-act="metro-stop" aria-label="Stop metronome">Stop</button>
   </div>
 
+  <div id="ringer" class="countdown" hidden role="dialog" aria-label="Sound reminder">
+    <div class="cd-box">
+      <p class="ringer-icon" aria-hidden="true">🔔</p>
+      <p class="ringer-title">Is your ringer on?</p>
+      <p class="cd-sub">Make sure your phone isn't on silent so you hear the timer and metronome.</p>
+      <div class="cd-progress"><span></span></div>
+      <div class="cd-actions">
+        <button type="button" class="btn big" data-act="ringer-test">Test sound</button>
+        <button type="button" class="btn primary big" data-act="ringer-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden role="status"></div>
   <nav id="tabs" class="tabs" aria-label="Sections"></nav>
 
